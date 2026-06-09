@@ -130,3 +130,131 @@ impl IntoResponse for ApiError {
         (status, Json(ErrorBody { message })).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        body::{Body, to_bytes},
+        http::{Request, header::CONTENT_TYPE},
+    };
+    use serde_json::{Value, json};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn create_fund_returns_created_record() {
+        let app = test_app();
+        let response = app
+            .oneshot(json_request(
+                "POST",
+                "/funds",
+                json!({
+                    "account_id": "fund/main",
+                    "description": "Main fund"
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = response_body(response).await;
+        assert_eq!(body["account_id"], "fund/main");
+        assert_eq!(body["state"]["summary"]["unit_price"], 1.0);
+    }
+
+    #[tokio::test]
+    async fn duplicate_fund_returns_conflict() {
+        let app = test_app();
+        let request_body = json!({
+            "account_id": "fund/main",
+            "description": "Main fund"
+        });
+
+        app.clone()
+            .oneshot(json_request("POST", "/funds", request_body.clone()))
+            .await
+            .unwrap();
+        let response = app
+            .oneshot(json_request("POST", "/funds", request_body))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn append_event_updates_fund_state() {
+        let app = test_app();
+
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                "/funds",
+                json!({
+                    "account_id": "fund/main",
+                    "description": "Main fund"
+                }),
+            ))
+            .await
+            .unwrap();
+        let response = app
+            .oneshot(json_request(
+                "POST",
+                "/funds/fund%2Fmain/events",
+                json!({
+                    "updated_at": "2026-06-09T00:00:00Z",
+                    "comment": null,
+                    "fund_equity": null,
+                    "order": {
+                        "name": "Alice",
+                        "deposit": 100.0
+                    },
+                    "investor": null,
+                    "taxation": null
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response_body(response).await;
+        assert_eq!(body["events"].as_array().unwrap().len(), 1);
+        assert_eq!(body["state"]["total_assets"], 100.0);
+        assert_eq!(body["state"]["investors"]["Alice"]["share"], 100.0);
+    }
+
+    #[tokio::test]
+    async fn get_missing_fund_returns_not_found() {
+        let response = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/funds/missing")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    fn test_app() -> Router {
+        router(Arc::new(RwLock::new(Store::default())))
+    }
+
+    fn json_request(method: &str, uri: &str, body: Value) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    async fn response_body(response: Response) -> Value {
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+}
