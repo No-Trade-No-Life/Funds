@@ -2,6 +2,7 @@
 
 mod api;
 mod domain;
+mod proxy;
 
 use crate::{api::Store, domain::*};
 use axum::Router;
@@ -56,6 +57,7 @@ fn app() -> Router {
 
     api::router(store)
         .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()))
+        .fallback(proxy::frontend_proxy)
 }
 
 async fn shutdown_signal() {

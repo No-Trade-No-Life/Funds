@@ -17,6 +17,17 @@ cargo run
 
 The service listens on `127.0.0.1:3000`.
 
+## Frontend
+
+```sh
+cd frontend
+npm install
+npm run dev
+```
+
+The Rust service reverse-proxies unmatched routes to the Vite dev server at
+`http://127.0.0.1:5173`. Override it with `FRONTEND_ORIGIN` when needed.
+
 ## Endpoints
 
 - `GET /health`
