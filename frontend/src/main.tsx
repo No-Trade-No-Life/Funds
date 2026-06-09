@@ -7,14 +7,44 @@ type FundRecord = {
   description: string;
   state: {
     total_assets: number;
+    total_taxed: number;
     summary: {
+      total_deposit: number;
       total_share: number;
+      total_tax: number;
       unit_price: number;
       total_profit: number;
     };
-    investors: Record<string, { share: number; deposit: number }>;
+    investors: Record<string, InvestorMeta>;
   };
-  events: unknown[];
+  events: FundEvent[];
+};
+
+type InvestorMeta = {
+  share: number;
+  tax_threshold: number;
+  deposit: number;
+  tax_rate: number;
+  avg_cost_price: number;
+  referrer: string | null;
+  referrer_rebate_rate: number;
+  claimed_referrer_rebate: number;
+  taxed: number;
+};
+
+type FundEvent = {
+  updated_at: string;
+  comment: string | null;
+  fund_equity: { equity: number } | null;
+  order: { name: string; deposit: number } | null;
+  investor: {
+    name: string;
+    tax_rate: number | null;
+    add_tax_threshold: number | null;
+    referrer: string | null;
+    referrer_rebate_rate: number | null;
+  } | null;
+  taxation: 'legacy' | 'preserve_fund_assets' | null;
 };
 
 type ExchangeKind = 'okx' | 'gate' | 'binance' | 'aster' | 'hyperliquid' | 'bitget' | 'htx';
@@ -47,6 +77,14 @@ function App() {
   const [eventFundId, setEventFundId] = useState('fund/main');
   const [investorName, setInvestorName] = useState('Alice');
   const [deposit, setDeposit] = useState('1000');
+  const [selectedFundId, setSelectedFundId] = useState('');
+  const [equityValue, setEquityValue] = useState('');
+  const [detailInvestorName, setDetailInvestorName] = useState('Alice');
+  const [taxRate, setTaxRate] = useState('0.2');
+  const [taxThresholdDelta, setTaxThresholdDelta] = useState('0');
+  const [referrer, setReferrer] = useState('');
+  const [rebateRate, setRebateRate] = useState('0');
+  const [taxationKind, setTaxationKind] = useState<'legacy' | 'preserve_fund_assets'>('preserve_fund_assets');
   const [credentialLabel, setCredentialLabel] = useState('Main exchange');
   const [exchange, setExchange] = useState<ExchangeKind>('okx');
   const [payload, setPayload] = useState(defaultPayload('okx'));
@@ -64,6 +102,7 @@ function App() {
     const response = await fetch('/funds');
     const records = (await response.json()) as FundRecord[];
     setFunds(records);
+    setSelectedFundId((current) => current || records[0]?.account_id || '');
     setMessage(records.length === 0 ? 'No funds yet. Create one through the API.' : 'Funds loaded.');
   }
 
@@ -143,8 +182,80 @@ function App() {
     await loadFunds();
   }
 
+  async function appendFundEvent(accountId: string, event: FundEvent) {
+    const response = await fetch(`/funds/${encodeURIComponent(accountId)}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    });
+
+    setMessage(response.ok ? 'Fund event appended.' : 'Fund event failed.');
+    await loadFunds();
+  }
+
+  async function updateFundEquity() {
+    const equity = Number(equityValue);
+
+    if (!selectedFund || !Number.isFinite(equity)) {
+      setMessage('Select a fund and enter a valid equity value.');
+      return;
+    }
+
+    await appendFundEvent(selectedFund.account_id, {
+      updated_at: new Date().toISOString(),
+      comment: 'Fund equity update',
+      fund_equity: { equity },
+      order: null,
+      investor: null,
+      taxation: null,
+    });
+  }
+
+  async function updateInvestor() {
+    const parsedTaxRate = Number(taxRate);
+    const parsedThresholdDelta = Number(taxThresholdDelta);
+    const parsedRebateRate = Number(rebateRate);
+
+    if (!selectedFund || !Number.isFinite(parsedTaxRate) || !Number.isFinite(parsedThresholdDelta) || !Number.isFinite(parsedRebateRate)) {
+      setMessage('Investor update values must be valid numbers.');
+      return;
+    }
+
+    await appendFundEvent(selectedFund.account_id, {
+      updated_at: new Date().toISOString(),
+      comment: `Investor update for ${detailInvestorName}`,
+      fund_equity: null,
+      order: null,
+      investor: {
+        name: detailInvestorName,
+        tax_rate: parsedTaxRate,
+        add_tax_threshold: parsedThresholdDelta,
+        referrer: referrer || null,
+        referrer_rebate_rate: parsedRebateRate,
+      },
+      taxation: null,
+    });
+  }
+
+  async function applyTaxation() {
+    if (!selectedFund) {
+      setMessage('Select a fund before applying taxation.');
+      return;
+    }
+
+    await appendFundEvent(selectedFund.account_id, {
+      updated_at: new Date().toISOString(),
+      comment: 'Taxation event',
+      fund_equity: null,
+      order: null,
+      investor: null,
+      taxation: taxationKind,
+    });
+  }
+
   const totalAssets = funds.reduce((sum, fund) => sum + fund.state.total_assets, 0);
   const totalInvestors = funds.reduce((sum, fund) => sum + Object.keys(fund.state.investors).length, 0);
+  const selectedFund = funds.find((fund) => fund.account_id === selectedFundId) ?? funds[0];
 
   return (
     <main className="shell">
@@ -303,7 +414,110 @@ function App() {
           ))}
         </div>
       </section>
+
+      {selectedFund ? (
+        <section className="panel detailPanel">
+          <div className="panelHeader">
+            <h2>Fund detail</h2>
+            <select value={selectedFund.account_id} onChange={(event) => setSelectedFundId(event.target.value)}>
+              {funds.map((fund) => (
+                <option value={fund.account_id} key={fund.account_id}>{fund.account_id}</option>
+              ))}
+            </select>
+          </div>
+
+          <section className="metrics compactMetrics" aria-label="Selected fund metrics">
+            <Metric label="Unit price" value={selectedFund.state.summary.unit_price.toFixed(4)} />
+            <Metric label="Total assets" value={formatMoney(selectedFund.state.total_assets)} />
+            <Metric label="Total profit" value={formatMoney(selectedFund.state.summary.total_profit)} />
+            <Metric label="Total tax" value={formatMoney(selectedFund.state.summary.total_tax)} />
+          </section>
+
+          <div className="detailGrid">
+            <div className="chartCard">
+              <div className="panelHeader compact">
+                <h3>Net value curve</h3>
+                <span>{selectedFund.events.length} events</span>
+              </div>
+              <NavChart points={navPoints(selectedFund)} />
+            </div>
+
+            <div className="operationStack">
+              <div className="operationCard">
+                <h3>Update equity</h3>
+                <label>
+                  Total equity
+                  <input value={equityValue} onChange={(event) => setEquityValue(event.target.value)} inputMode="decimal" />
+                </label>
+                <button type="button" onClick={() => void updateFundEquity()}>Update NAV</button>
+              </div>
+
+              <div className="operationCard">
+                <h3>Investor settings</h3>
+                <label>
+                  Investor
+                  <input value={detailInvestorName} onChange={(event) => setDetailInvestorName(event.target.value)} />
+                </label>
+                <label>
+                  Tax rate
+                  <input value={taxRate} onChange={(event) => setTaxRate(event.target.value)} inputMode="decimal" />
+                </label>
+                <label>
+                  Tax threshold delta
+                  <input value={taxThresholdDelta} onChange={(event) => setTaxThresholdDelta(event.target.value)} inputMode="decimal" />
+                </label>
+                <label>
+                  Referrer
+                  <input value={referrer} onChange={(event) => setReferrer(event.target.value)} />
+                </label>
+                <label>
+                  Rebate rate
+                  <input value={rebateRate} onChange={(event) => setRebateRate(event.target.value)} inputMode="decimal" />
+                </label>
+                <button type="button" onClick={() => void updateInvestor()}>Update investor</button>
+              </div>
+
+              <div className="operationCard">
+                <h3>Taxation</h3>
+                <label>
+                  Mode
+                  <select value={taxationKind} onChange={(event) => setTaxationKind(event.target.value as typeof taxationKind)}>
+                    <option value="preserve_fund_assets">Preserve fund assets</option>
+                    <option value="legacy">Legacy</option>
+                  </select>
+                </label>
+                <button type="button" onClick={() => void applyTaxation()}>Apply taxation</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="investorTable">
+            {Object.entries(selectedFund.state.investors).map(([name, investor]) => (
+              <article className="investorRow" key={name}>
+                <strong>{name}</strong>
+                <span>Share {investor.share.toFixed(4)}</span>
+                <span>Deposit {formatMoney(investor.deposit)}</span>
+                <span>Tax rate {(investor.tax_rate * 100).toFixed(2)}%</span>
+                <span>Taxed {formatMoney(investor.taxed)}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
+  );
+}
+
+function NavChart({ points }: { points: Array<{ index: number; unitPrice: number }> }) {
+  const path = chartPath(points);
+
+  return (
+    <svg className="navChart" viewBox="0 0 640 220" role="img" aria-label="Net value curve">
+      <path className="chartGrid" d="M20 40 H620 M20 110 H620 M20 180 H620" />
+      <path className="chartLine" d={path} />
+      <text x="24" y="32">{points.at(-1)?.unitPrice.toFixed(4) ?? '1.0000'}</text>
+      <text x="24" y="204">1.0000</text>
+    </svg>
   );
 }
 
@@ -336,6 +550,45 @@ function defaultPayload(exchange: ExchangeKind) {
   };
 
   return JSON.stringify(payloadByExchange[exchange], null, 2);
+}
+
+function navPoints(fund: FundRecord) {
+  let totalAssets = 0;
+  let totalShare = 0;
+  let unitPrice = 1;
+  const points = [{ index: 0, unitPrice }];
+
+  fund.events.forEach((event, index) => {
+    if (event.fund_equity) {
+      totalAssets = event.fund_equity.equity;
+    }
+
+    if (event.order) {
+      const share = event.order.deposit / unitPrice;
+      totalShare += share;
+      totalAssets += event.order.deposit;
+    }
+
+    unitPrice = totalShare === 0 ? 1 : totalAssets / totalShare;
+    points.push({ index: index + 1, unitPrice });
+  });
+
+  return points;
+}
+
+function chartPath(points: Array<{ index: number; unitPrice: number }>) {
+  const maxPrice = Math.max(1, ...points.map((point) => point.unitPrice));
+  const width = 600;
+  const height = 160;
+  const lastIndex = Math.max(1, points.at(-1)?.index ?? 1);
+
+  return points
+    .map((point, index) => {
+      const x = 20 + (point.index / lastIndex) * width;
+      const y = 190 - (point.unitPrice / maxPrice) * height;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
 }
 
 createRoot(document.getElementById('root')!).render(
