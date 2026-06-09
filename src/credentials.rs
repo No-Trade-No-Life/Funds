@@ -10,7 +10,7 @@ pub struct CredentialVault {
 }
 
 impl CredentialVault {
-    pub fn register(&mut self, request: RegisterCredentialRequest) -> CredentialView {
+    pub fn register(&mut self, request: RegisterCredentialRequest) -> CredentialRecord {
         let id = format!("credential-{}", self.records.len() + 1);
         let record = CredentialRecord {
             id: id.clone(),
@@ -19,9 +19,17 @@ impl CredentialVault {
             payload: request.payload,
             created_at: Utc::now(),
         };
-        let view = record.view();
-        self.records.insert(id, record);
-        view
+        self.records.insert(id, record.clone());
+        record
+    }
+
+    pub fn from_records(records: Vec<CredentialRecord>) -> Self {
+        Self {
+            records: records
+                .into_iter()
+                .map(|record| (record.id.clone(), record))
+                .collect(),
+        }
     }
 
     pub fn list(&self) -> Vec<CredentialView> {

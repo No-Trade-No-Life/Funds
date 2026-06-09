@@ -17,6 +17,9 @@ cargo run
 
 The service listens on `127.0.0.1:3000`.
 
+The backend persists funds and credentials in SQLite. By default it uses
+`funds.sqlite` in the project directory. Override it with `DATABASE_PATH`.
+
 ## Frontend
 
 ```sh
@@ -44,9 +47,9 @@ The Rust service reverse-proxies unmatched routes to the Vite dev server at
 
 ## Credentials And Capital Summary
 
-Credentials are registered with an exchange type and a secret payload. API responses never
-return the payload. Supported exchange summary adapters are `okx`, `gate`, `binance`, and
-`aster`.
+Credentials are registered with an exchange type and a secret payload, then persisted in
+SQLite. API responses never return the payload. Supported exchange summary adapters are
+`okx`, `gate`, `binance`, and `aster`.
 
 ## Domain Model
 

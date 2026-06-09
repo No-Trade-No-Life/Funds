@@ -6,6 +6,7 @@ mod credentials;
 mod domain;
 mod exchanges;
 mod proxy;
+mod storage;
 
 use crate::{api::Store, capital::*, credentials::*, domain::*};
 use axum::Router;
@@ -67,11 +68,17 @@ async fn main() {
 }
 
 fn app() -> Router {
-    let store = Arc::new(RwLock::new(Store::default()));
+    let store = Arc::new(RwLock::new(
+        Store::open(database_path()).expect("open sqlite database"),
+    ));
 
     api::router(store)
         .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .fallback(proxy::frontend_proxy)
+}
+
+fn database_path() -> String {
+    std::env::var("DATABASE_PATH").unwrap_or_else(|_| "funds.sqlite".to_owned())
 }
 
 async fn shutdown_signal() {

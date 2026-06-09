@@ -2,6 +2,7 @@ use crate::{
     capital::{CapitalSummary, summarize_credential, summarize_vault},
     credentials::{CredentialVault, CredentialView, RegisterCredentialRequest},
     domain::{CreateFundRequest, FundEvent, FundRecord},
+    storage::{Database, StorageError},
 };
 use axum::{
     Json, Router,
@@ -11,16 +12,41 @@ use axum::{
     routing::{get, post},
 };
 use serde::Serialize;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, path::Path as FilePath, sync::Arc};
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
 
 pub type SharedStore = Arc<RwLock<Store>>;
 
-#[derive(Default)]
 pub struct Store {
     funds: BTreeMap<String, FundRecord>,
     credentials: CredentialVault,
+    database: Database,
+}
+
+impl Store {
+    pub fn open(path: impl AsRef<FilePath>) -> Result<Self, StorageError> {
+        Self::from_database(Database::open(path)?)
+    }
+
+    fn from_database(database: Database) -> Result<Self, StorageError> {
+        Ok(Self {
+            funds: database
+                .load_funds()?
+                .into_iter()
+                .map(|fund| (fund.account_id.clone(), fund))
+                .collect(),
+            credentials: database.load_credentials()?,
+            database,
+        })
+    }
+}
+
+impl Default for Store {
+    fn default() -> Self {
+        Self::from_database(Database::memory().expect("open in-memory sqlite database"))
+            .expect("load in-memory sqlite database")
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -32,6 +58,7 @@ pub struct ErrorBody {
 enum ApiError {
     Conflict(String),
     NotFound(String),
+    Internal(String),
 }
 
 pub fn router(store: SharedStore) -> Router {
@@ -80,6 +107,7 @@ async fn create_fund(
     }
 
     let record = FundRecord::new(request.account_id.clone(), request.description);
+    store.database.save_fund(&record)?;
     store.funds.insert(request.account_id, record.clone());
 
     Ok((StatusCode::CREATED, Json(record)))
@@ -130,8 +158,10 @@ async fn append_event(
         .ok_or_else(|| ApiError::NotFound(format!("fund '{account_id}' was not found")))?;
 
     record.append(event);
+    let saved = record.clone();
+    store.database.save_fund(&saved)?;
 
-    Ok(Json(record.clone()))
+    Ok(Json(saved))
 }
 
 #[utoipa::path(
@@ -143,11 +173,12 @@ async fn append_event(
 async fn register_credential(
     State(store): State<SharedStore>,
     Json(request): Json<RegisterCredentialRequest>,
-) -> (StatusCode, Json<CredentialView>) {
+) -> Result<(StatusCode, Json<CredentialView>), ApiError> {
     let mut store = store.write().await;
     let credential = store.credentials.register(request);
+    store.database.save_credential(&credential)?;
 
-    (StatusCode::CREATED, Json(credential))
+    Ok((StatusCode::CREATED, Json(credential.view())))
 }
 
 #[utoipa::path(get, path = "/credentials", responses((status = 200, body = Vec<CredentialView>)))]
@@ -196,9 +227,16 @@ impl IntoResponse for ApiError {
         let (status, message) = match self {
             ApiError::Conflict(message) => (StatusCode::CONFLICT, message),
             ApiError::NotFound(message) => (StatusCode::NOT_FOUND, message),
+            ApiError::Internal(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 
         (status, Json(ErrorBody { message })).into_response()
+    }
+}
+
+impl From<StorageError> for ApiError {
+    fn from(error: StorageError) -> Self {
+        Self::Internal(error.to_string())
     }
 }
 
