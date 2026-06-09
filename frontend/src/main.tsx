@@ -42,6 +42,11 @@ function App() {
   const [funds, setFunds] = useState<FundRecord[]>([]);
   const [credentials, setCredentials] = useState<CredentialView[]>([]);
   const [capitalSummary, setCapitalSummary] = useState<CapitalSummary | null>(null);
+  const [fundAccountId, setFundAccountId] = useState('fund/main');
+  const [fundDescription, setFundDescription] = useState('Main fund');
+  const [eventFundId, setEventFundId] = useState('fund/main');
+  const [investorName, setInvestorName] = useState('Alice');
+  const [deposit, setDeposit] = useState('1000');
   const [credentialLabel, setCredentialLabel] = useState('Main exchange');
   const [exchange, setExchange] = useState<ExchangeKind>('okx');
   const [payload, setPayload] = useState(defaultPayload('okx'));
@@ -96,6 +101,48 @@ function App() {
     await refreshDashboard();
   }
 
+  async function createFund() {
+    const response = await fetch('/funds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        account_id: fundAccountId,
+        description: fundDescription,
+      }),
+    });
+
+    setMessage(response.ok ? 'Fund created.' : 'Fund creation failed.');
+    await loadFunds();
+  }
+
+  async function appendDeposit() {
+    const depositValue = Number(deposit);
+
+    if (!Number.isFinite(depositValue)) {
+      setMessage('Deposit must be a number.');
+      return;
+    }
+
+    const response = await fetch(`/funds/${encodeURIComponent(eventFundId)}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        updated_at: new Date().toISOString(),
+        comment: `Deposit from ${investorName}`,
+        fund_equity: null,
+        order: {
+          name: investorName,
+          deposit: depositValue,
+        },
+        investor: null,
+        taxation: null,
+      }),
+    });
+
+    setMessage(response.ok ? 'Deposit event appended.' : 'Deposit event failed.');
+    await loadFunds();
+  }
+
   const totalAssets = funds.reduce((sum, fund) => sum + fund.state.total_assets, 0);
   const totalInvestors = funds.reduce((sum, fund) => sum + Object.keys(fund.state.investors).length, 0);
 
@@ -118,6 +165,47 @@ function App() {
         <Metric label="Investors" value={totalInvestors.toString()} />
         <Metric label="Assets" value={formatMoney(totalAssets)} />
         <Metric label="Exchange Equity" value={formatMoney(capitalSummary?.total_equity_usd ?? 0)} />
+      </section>
+
+      <section className="panel splitPanel">
+        <div>
+          <div className="panelHeader compact">
+            <h2>Create fund</h2>
+            <span>Persisted in SQLite</span>
+          </div>
+          <label>
+            Account ID
+            <input value={fundAccountId} onChange={(event) => setFundAccountId(event.target.value)} />
+          </label>
+          <label>
+            Description
+            <input value={fundDescription} onChange={(event) => setFundDescription(event.target.value)} />
+          </label>
+          <button type="button" onClick={() => void createFund()}>
+            Create fund
+          </button>
+        </div>
+        <div>
+          <div className="panelHeader compact">
+            <h2>Add deposit</h2>
+            <span>Append event</span>
+          </div>
+          <label>
+            Fund account ID
+            <input value={eventFundId} onChange={(event) => setEventFundId(event.target.value)} />
+          </label>
+          <label>
+            Investor
+            <input value={investorName} onChange={(event) => setInvestorName(event.target.value)} />
+          </label>
+          <label>
+            Deposit
+            <input value={deposit} onChange={(event) => setDeposit(event.target.value)} inputMode="decimal" />
+          </label>
+          <button type="button" onClick={() => void appendDeposit()}>
+            Append deposit
+          </button>
+        </div>
       </section>
 
       <section className="panel splitPanel">
