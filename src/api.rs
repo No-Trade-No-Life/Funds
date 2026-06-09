@@ -1,4 +1,8 @@
-use crate::domain::{CreateFundRequest, FundEvent, FundRecord};
+use crate::{
+    capital::{CapitalSummary, summarize_credential, summarize_vault},
+    credentials::{CredentialVault, CredentialView, RegisterCredentialRequest},
+    domain::{CreateFundRequest, FundEvent, FundRecord},
+};
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -16,6 +20,7 @@ pub type SharedStore = Arc<RwLock<Store>>;
 #[derive(Default)]
 pub struct Store {
     funds: BTreeMap<String, FundRecord>,
+    credentials: CredentialVault,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -35,6 +40,15 @@ pub fn router(store: SharedStore) -> Router {
         .route("/funds", post(create_fund).get(list_funds))
         .route("/funds/{account_id}", get(get_fund))
         .route("/funds/{account_id}/events", post(append_event))
+        .route(
+            "/credentials",
+            post(register_credential).get(list_credentials),
+        )
+        .route(
+            "/credentials/{credential_id}/capital-summary",
+            get(get_credential_capital_summary),
+        )
+        .route("/capital-summary", get(get_capital_summary))
         .with_state(store)
 }
 
@@ -118,6 +132,63 @@ async fn append_event(
     record.append(event);
 
     Ok(Json(record.clone()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/credentials",
+    request_body = RegisterCredentialRequest,
+    responses((status = 201, body = CredentialView))
+)]
+async fn register_credential(
+    State(store): State<SharedStore>,
+    Json(request): Json<RegisterCredentialRequest>,
+) -> (StatusCode, Json<CredentialView>) {
+    let mut store = store.write().await;
+    let credential = store.credentials.register(request);
+
+    (StatusCode::CREATED, Json(credential))
+}
+
+#[utoipa::path(get, path = "/credentials", responses((status = 200, body = Vec<CredentialView>)))]
+async fn list_credentials(State(store): State<SharedStore>) -> Json<Vec<CredentialView>> {
+    let store = store.read().await;
+
+    Json(store.credentials.list())
+}
+
+#[utoipa::path(get, path = "/capital-summary", responses((status = 200, body = CapitalSummary)))]
+async fn get_capital_summary(State(store): State<SharedStore>) -> Json<CapitalSummary> {
+    let credentials = {
+        let store = store.read().await;
+        store.credentials.clone()
+    };
+
+    Json(summarize_vault(&credentials).await)
+}
+
+#[utoipa::path(
+    get,
+    path = "/credentials/{credential_id}/capital-summary",
+    params(("credential_id" = String, Path, description = "Credential id")),
+    responses((status = 200, body = crate::capital::AccountCapitalSummary), (status = 404, body = ErrorBody))
+)]
+async fn get_credential_capital_summary(
+    State(store): State<SharedStore>,
+    Path(credential_id): Path<String>,
+) -> Result<Json<crate::capital::AccountCapitalSummary>, ApiError> {
+    let credential = {
+        let store = store.read().await;
+        store
+            .credentials
+            .get(&credential_id)
+            .cloned()
+            .ok_or_else(|| {
+                ApiError::NotFound(format!("credential '{credential_id}' was not found"))
+            })?
+    };
+
+    Ok(Json(summarize_credential(&credential).await))
 }
 
 impl IntoResponse for ApiError {
@@ -238,6 +309,32 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn register_credential_hides_payload() {
+        let response = test_app()
+            .oneshot(json_request(
+                "POST",
+                "/credentials",
+                json!({
+                    "label": "OKX main",
+                    "exchange": "okx",
+                    "payload": {
+                        "access_key": "access",
+                        "secret_key": "secret",
+                        "passphrase": "passphrase"
+                    }
+                }),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = response_body(response).await;
+        assert_eq!(body["id"], "credential-1");
+        assert_eq!(body.get("payload"), None);
     }
 
     fn test_app() -> Router {

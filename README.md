@@ -35,8 +35,18 @@ The Rust service reverse-proxies unmatched routes to the Vite dev server at
 - `GET /funds`
 - `GET /funds/{account_id}`
 - `POST /funds/{account_id}/events`
+- `POST /credentials`
+- `GET /credentials`
+- `GET /credentials/{credential_id}/capital-summary`
+- `GET /capital-summary`
 - `GET /docs`
 - `GET /api-doc/openapi.json`
+
+## Credentials And Capital Summary
+
+Credentials are registered with an exchange type and a secret payload. API responses never
+return the payload. Supported exchange summary adapters are `okx`, `gate`, `binance`, and
+`aster`.
 
 ## Domain Model
 

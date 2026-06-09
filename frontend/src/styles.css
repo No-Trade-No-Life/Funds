@@ -38,6 +38,30 @@ button {
   background: rgba(255, 255, 255, 0.12);
 }
 
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid rgba(244, 195, 109, 0.22);
+  border-radius: 1rem;
+  padding: 0.8rem 0.9rem;
+  color: #f6efe4;
+  background: rgba(17, 16, 14, 0.72);
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+label {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+  color: #cdbb9f;
+  font-size: 0.85rem;
+}
+
 .shell {
   width: min(1120px, calc(100% - 2rem));
   margin: 0 auto;
@@ -119,7 +143,14 @@ dt {
 
 .panel {
   border-radius: 2rem;
+  margin-bottom: 1.2rem;
   padding: 1.25rem;
+}
+
+.splitPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.9fr);
+  gap: 1.2rem;
 }
 
 .panelHeader {
@@ -133,6 +164,29 @@ dt {
 .fundList {
   display: grid;
   gap: 1rem;
+}
+
+.credentialList {
+  display: grid;
+  align-content: start;
+  gap: 0.8rem;
+}
+
+.credentialCard {
+  display: grid;
+  gap: 0.35rem;
+  border-radius: 1.1rem;
+  padding: 1rem;
+  background: rgba(17, 16, 14, 0.62);
+}
+
+.credentialCard span {
+  color: #f4c36d;
+  text-transform: uppercase;
+}
+
+.credentialCard small {
+  color: #cdbb9f;
 }
 
 .fundCard {
@@ -168,7 +222,8 @@ dd {
   }
 
   .fundCard,
-  .panelHeader {
+  .panelHeader,
+  .splitPanel {
     grid-template-columns: 1fr;
   }
 

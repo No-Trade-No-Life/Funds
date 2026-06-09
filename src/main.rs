@@ -1,10 +1,13 @@
 #![forbid(unsafe_code)]
 
 mod api;
+mod capital;
+mod credentials;
 mod domain;
+mod exchanges;
 mod proxy;
 
-use crate::{api::Store, domain::*};
+use crate::{api::Store, capital::*, credentials::*, domain::*};
 use axum::Router;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
@@ -18,11 +21,20 @@ use utoipa_swagger_ui::SwaggerUi;
         api::create_fund,
         api::list_funds,
         api::get_fund,
-        api::append_event
+        api::append_event,
+        api::register_credential,
+        api::list_credentials,
+        api::get_credential_capital_summary,
+        api::get_capital_summary
     ),
     components(schemas(
+        AccountCapitalSummary,
+        CapitalComponent,
+        CapitalSummary,
         api::ErrorBody,
+        CredentialView,
         CreateFundRequest,
+        ExchangeKind,
         FundEquity,
         FundEvent,
         FundRecord,
@@ -32,6 +44,8 @@ use utoipa_swagger_ui::SwaggerUi;
         InvestorMeta,
         InvestorOrder,
         InvestorUpdate,
+        RegisterCredentialRequest,
+        SummaryStatus,
         TaxationKind
     )),
     tags((name = "funds", description = "Fund and investor relationship management"))

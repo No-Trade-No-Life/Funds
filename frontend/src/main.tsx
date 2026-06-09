@@ -17,19 +17,83 @@ type FundRecord = {
   events: unknown[];
 };
 
+type ExchangeKind = 'okx' | 'gate' | 'binance' | 'aster';
+
+type CredentialView = {
+  id: string;
+  label: string;
+  exchange: ExchangeKind;
+  created_at: string;
+};
+
+type CapitalSummary = {
+  total_equity_usd: number;
+  accounts: {
+    credential_id: string;
+    label: string;
+    exchange: ExchangeKind;
+    status: 'ok' | 'failed';
+    equity_usd: number;
+    error: string | null;
+  }[];
+};
+
 function App() {
   const [funds, setFunds] = useState<FundRecord[]>([]);
+  const [credentials, setCredentials] = useState<CredentialView[]>([]);
+  const [capitalSummary, setCapitalSummary] = useState<CapitalSummary | null>(null);
+  const [credentialLabel, setCredentialLabel] = useState('Main exchange');
+  const [exchange, setExchange] = useState<ExchangeKind>('okx');
+  const [payload, setPayload] = useState(defaultPayload('okx'));
   const [message, setMessage] = useState('Loading funds...');
 
   useEffect(() => {
-    void loadFunds();
+    void refreshDashboard();
   }, []);
+
+  async function refreshDashboard() {
+    await Promise.all([loadFunds(), loadCredentials(), loadCapitalSummary()]);
+  }
 
   async function loadFunds() {
     const response = await fetch('/funds');
     const records = (await response.json()) as FundRecord[];
     setFunds(records);
     setMessage(records.length === 0 ? 'No funds yet. Create one through the API.' : 'Funds loaded.');
+  }
+
+  async function loadCredentials() {
+    const response = await fetch('/credentials');
+    setCredentials((await response.json()) as CredentialView[]);
+  }
+
+  async function loadCapitalSummary() {
+    const response = await fetch('/capital-summary');
+    setCapitalSummary((await response.json()) as CapitalSummary);
+  }
+
+  async function registerCredential() {
+    let parsedPayload: unknown;
+
+    try {
+      parsedPayload = JSON.parse(payload);
+    } catch {
+      setMessage('Credential payload must be valid JSON.');
+      return;
+    }
+
+    const response = await fetch('/credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        label: credentialLabel,
+        exchange,
+        payload: parsedPayload,
+      }),
+    });
+
+    setMessage(response.ok ? 'Credential registered.' : 'Credential registration failed.');
+    await refreshDashboard();
   }
 
   const totalAssets = funds.reduce((sum, fund) => sum + fund.state.total_assets, 0);
@@ -43,7 +107,7 @@ function App() {
         <p className="intro">A Vite, TypeScript, and React frontend served through the Rust gateway.</p>
         <div className="actions">
           <a href="/docs">Open API Docs</a>
-          <button type="button" onClick={() => void loadFunds()}>
+          <button type="button" onClick={() => void refreshDashboard()}>
             Refresh
           </button>
         </div>
@@ -53,6 +117,75 @@ function App() {
         <Metric label="Funds" value={funds.length.toString()} />
         <Metric label="Investors" value={totalInvestors.toString()} />
         <Metric label="Assets" value={formatMoney(totalAssets)} />
+        <Metric label="Exchange Equity" value={formatMoney(capitalSummary?.total_equity_usd ?? 0)} />
+      </section>
+
+      <section className="panel splitPanel">
+        <div>
+          <div className="panelHeader compact">
+            <h2>Credentials</h2>
+            <span>{credentials.length} registered</span>
+          </div>
+          <label>
+            Label
+            <input value={credentialLabel} onChange={(event) => setCredentialLabel(event.target.value)} />
+          </label>
+          <label>
+            Exchange
+            <select
+              value={exchange}
+              onChange={(event) => {
+                const nextExchange = event.target.value as ExchangeKind;
+                setExchange(nextExchange);
+                setPayload(defaultPayload(nextExchange));
+              }}
+            >
+              <option value="okx">OKX</option>
+              <option value="gate">Gate</option>
+              <option value="binance">Binance</option>
+              <option value="aster">Aster</option>
+            </select>
+          </label>
+          <label>
+            Secret payload JSON
+            <textarea value={payload} onChange={(event) => setPayload(event.target.value)} rows={6} />
+          </label>
+          <button type="button" onClick={() => void registerCredential()}>
+            Register credential
+          </button>
+        </div>
+        <div className="credentialList">
+          {credentials.map((credential) => (
+            <article className="credentialCard" key={credential.id}>
+              <strong>{credential.label}</strong>
+              <span>{credential.exchange}</span>
+              <small>{credential.id}</small>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>Capital summary</h2>
+          <span>{capitalSummary ? formatMoney(capitalSummary.total_equity_usd) : 'Not loaded'}</span>
+        </div>
+        <div className="fundList">
+          {capitalSummary?.accounts.map((account) => (
+            <article className="fundCard" key={account.credential_id}>
+              <div>
+                <h3>{account.label}</h3>
+                <p>{account.exchange} / {account.status}</p>
+              </div>
+              <dl>
+                <dt>Equity</dt>
+                <dd>{formatMoney(account.equity_usd)}</dd>
+                <dt>Error</dt>
+                <dd>{account.error ?? 'None'}</dd>
+              </dl>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="panel">
@@ -98,6 +231,17 @@ function formatMoney(value: number) {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function defaultPayload(exchange: ExchangeKind) {
+  const payloadByExchange: Record<ExchangeKind, unknown> = {
+    okx: { access_key: '', secret_key: '', passphrase: '' },
+    gate: { access_key: '', secret_key: '' },
+    binance: { access_key: '', secret_key: '' },
+    aster: { api_key: '', secret_key: '' },
+  };
+
+  return JSON.stringify(payloadByExchange[exchange], null, 2);
 }
 
 createRoot(document.getElementById('root')!).render(
