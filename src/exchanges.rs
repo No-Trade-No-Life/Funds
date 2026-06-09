@@ -49,6 +49,9 @@ pub async fn fetch_exchange_summary(
         ExchangeKind::Gate => fetch_gate_summary(&credential.payload).await,
         ExchangeKind::Binance => fetch_binance_summary(&credential.payload).await,
         ExchangeKind::Aster => fetch_aster_summary(&credential.payload).await,
+        ExchangeKind::Hyperliquid => fetch_hyperliquid_summary(&credential.payload).await,
+        ExchangeKind::Bitget => fetch_bitget_summary(&credential.payload).await,
+        ExchangeKind::Htx => fetch_htx_summary(&credential.payload).await,
     }
 }
 
@@ -179,6 +182,100 @@ async fn fetch_aster_summary(payload: &Value) -> Result<ExchangeSummary, Exchang
     })
 }
 
+async fn fetch_hyperliquid_summary(payload: &Value) -> Result<ExchangeSummary, ExchangeError> {
+    let address = required(payload, "address")?;
+    let response = reqwest::Client::new()
+        .post("https://api.hyperliquid.xyz/info")
+        .json(&serde_json::json!({
+            "type": "clearinghouseState",
+            "user": address,
+        }))
+        .send()
+        .await
+        .map_err(|error| ExchangeError::Http(error.to_string()))?
+        .json::<HyperliquidClearinghouseState>()
+        .await
+        .map_err(|error| ExchangeError::Http(error.to_string()))?;
+
+    Ok(ExchangeSummary {
+        components: vec![CapitalComponent {
+            name: "perpetual".to_owned(),
+            equity_usd: parse_number(&response.margin_summary.account_value),
+        }],
+    })
+}
+
+async fn fetch_bitget_summary(payload: &Value) -> Result<ExchangeSummary, ExchangeError> {
+    let access_key = required(payload, "access_key")?;
+    let secret_key = required(payload, "secret_key")?;
+    let passphrase = required(payload, "passphrase")?;
+    let path = "/api/v3/account/assets";
+    let timestamp = Utc::now().timestamp_millis().to_string();
+    let signature = bitget_signature(&timestamp, "GET", path, "", "", secret_key);
+    let mut headers = HeaderMap::new();
+    insert_header(&mut headers, "ACCESS-KEY", access_key)?;
+    insert_header(&mut headers, "ACCESS-SIGN", &signature)?;
+    insert_header(&mut headers, "ACCESS-TIMESTAMP", &timestamp)?;
+    insert_header(&mut headers, "ACCESS-PASSPHRASE", passphrase)?;
+
+    let response = reqwest::Client::new()
+        .get(format!("https://api.bitget.com{path}"))
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|error| ExchangeError::Http(error.to_string()))?
+        .json::<BitgetAccountAssetsResponse>()
+        .await
+        .map_err(|error| ExchangeError::Http(error.to_string()))?;
+
+    if response.msg != "success" {
+        return Err(ExchangeError::Api(response.msg));
+    }
+
+    Ok(ExchangeSummary {
+        components: vec![CapitalComponent {
+            name: "uta".to_owned(),
+            equity_usd: parse_number(&response.data.usdt_equity),
+        }],
+    })
+}
+
+async fn fetch_htx_summary(payload: &Value) -> Result<ExchangeSummary, ExchangeError> {
+    let access_key = required(payload, "access_key")?;
+    let secret_key = required(payload, "secret_key")?;
+    let path = "/linear-swap-api/v3/unified_account_info";
+    let request_params = htx_request_params(access_key);
+    let signature = htx_signature("GET", "api.hbdm.com", path, &request_params, secret_key);
+    let url = format!(
+        "https://api.hbdm.com{path}?{request_params}&Signature={}",
+        url_encode(&signature)
+    );
+
+    let response = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| ExchangeError::Http(error.to_string()))?
+        .json::<HtxUnifiedAccountResponse>()
+        .await
+        .map_err(|error| ExchangeError::Http(error.to_string()))?;
+
+    if response.status != "ok" {
+        return Err(ExchangeError::Api(response.msg.unwrap_or(response.status)));
+    }
+
+    Ok(ExchangeSummary {
+        components: response
+            .data
+            .into_iter()
+            .map(|account| CapitalComponent {
+                name: account.margin_asset,
+                equity_usd: account.margin_balance,
+            })
+            .collect(),
+    })
+}
+
 fn required<'a>(payload: &'a Value, field: &'static str) -> Result<&'a str, ExchangeError> {
     payload
         .get(field)
@@ -223,6 +320,40 @@ fn gate_signature(
     hmac_sha512_hex(secret, &sign_target)
 }
 
+fn bitget_signature(
+    timestamp: &str,
+    method: &str,
+    path: &str,
+    query: &str,
+    body: &str,
+    secret: &str,
+) -> String {
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key size");
+    mac.update(format!("{timestamp}{method}{path}{query}{body}").as_bytes());
+    BASE64.encode(mac.finalize().into_bytes())
+}
+
+fn htx_request_params(access_key: &str) -> String {
+    format!(
+        "AccessKeyId={}&SignatureMethod=HmacSHA256&SignatureVersion=2&Timestamp={}",
+        url_encode(access_key),
+        url_encode(&Utc::now().format("%Y-%m-%dT%H:%M:%S").to_string())
+    )
+}
+
+fn htx_signature(
+    method: &str,
+    host: &str,
+    path: &str,
+    request_params: &str,
+    secret: &str,
+) -> String {
+    let request_string = format!("{method}\n{host}\n{path}\n{request_params}");
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key size");
+    mac.update(request_string.as_bytes());
+    BASE64.encode(mac.finalize().into_bytes())
+}
+
 fn signed_query(secret: &str) -> String {
     let query = format!(
         "timestamp={}&recvWindow=5000",
@@ -246,6 +377,15 @@ fn hmac_sha512_hex(secret: &str, message: &str) -> String {
 
 fn parse_number(value: &str) -> f64 {
     value.parse().unwrap_or(0.0)
+}
+
+fn url_encode(value: &str) -> String {
+    value
+        .replace('%', "%25")
+        .replace(':', "%3A")
+        .replace('+', "%2B")
+        .replace('/', "%2F")
+        .replace('=', "%3D")
 }
 
 #[derive(Debug, Deserialize)]
@@ -285,6 +425,43 @@ struct AsterAsset {
     wallet_balance: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct HyperliquidClearinghouseState {
+    #[serde(rename = "marginSummary")]
+    margin_summary: HyperliquidMarginSummary,
+}
+
+#[derive(Debug, Deserialize)]
+struct HyperliquidMarginSummary {
+    #[serde(rename = "accountValue")]
+    account_value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct BitgetAccountAssetsResponse {
+    msg: String,
+    data: BitgetAccountAssets,
+}
+
+#[derive(Debug, Deserialize)]
+struct BitgetAccountAssets {
+    #[serde(rename = "usdtEquity")]
+    usdt_equity: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct HtxUnifiedAccountResponse {
+    status: String,
+    msg: Option<String>,
+    data: Vec<HtxUnifiedAccount>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HtxUnifiedAccount {
+    margin_asset: String,
+    margin_balance: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,6 +493,35 @@ mod tests {
                 "secret"
             ),
             "151a375f9efc52dc9d7bf7d01078566eb786697087df34a1b6e07ff734dd7a3002e20047dc525f56bfd647b8334dc5ff155f9f8a8aeda5a0691b01ea5f5ee884"
+        );
+    }
+
+    #[test]
+    fn bitget_signature_is_stable() {
+        assert_eq!(
+            bitget_signature(
+                "1780963200000",
+                "GET",
+                "/api/v3/account/assets",
+                "",
+                "",
+                "secret"
+            ),
+            "ChcsAoPz0D1XUEmHny8yjk1Jp1viMyMN7iZxB+qY9VA="
+        );
+    }
+
+    #[test]
+    fn htx_signature_is_stable() {
+        assert_eq!(
+            htx_signature(
+                "GET",
+                "api.hbdm.com",
+                "/linear-swap-api/v3/unified_account_info",
+                "AccessKeyId=access&SignatureMethod=HmacSHA256&SignatureVersion=2&Timestamp=2026-06-09T00%3A00%3A00",
+                "secret"
+            ),
+            "lO4ZTPoSwRBYYk7qXl40fIIMSCSspmM5DIruajsE7Fs="
         );
     }
 }

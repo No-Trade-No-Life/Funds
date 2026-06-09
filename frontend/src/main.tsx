@@ -17,7 +17,7 @@ type FundRecord = {
   events: unknown[];
 };
 
-type ExchangeKind = 'okx' | 'gate' | 'binance' | 'aster';
+type ExchangeKind = 'okx' | 'gate' | 'binance' | 'aster' | 'hyperliquid' | 'bitget' | 'htx';
 
 type CredentialView = {
   id: string;
@@ -232,6 +232,9 @@ function App() {
               <option value="gate">Gate</option>
               <option value="binance">Binance</option>
               <option value="aster">Aster</option>
+              <option value="hyperliquid">Hyperliquid</option>
+              <option value="bitget">Bitget</option>
+              <option value="htx">HTX</option>
             </select>
           </label>
           <label>
@@ -327,6 +330,9 @@ function defaultPayload(exchange: ExchangeKind) {
     gate: { access_key: '', secret_key: '' },
     binance: { access_key: '', secret_key: '' },
     aster: { api_key: '', secret_key: '' },
+    hyperliquid: { address: '' },
+    bitget: { access_key: '', secret_key: '', passphrase: '' },
+    htx: { access_key: '', secret_key: '' },
   };
 
   return JSON.stringify(payloadByExchange[exchange], null, 2);

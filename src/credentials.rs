@@ -87,4 +87,7 @@ pub enum ExchangeKind {
     Gate,
     Binance,
     Aster,
+    Hyperliquid,
+    Bitget,
+    Htx,
 }

@@ -49,7 +49,7 @@ The Rust service reverse-proxies unmatched routes to the Vite dev server at
 
 Credentials are registered with an exchange type and a secret payload, then persisted in
 SQLite. API responses never return the payload. Supported exchange summary adapters are
-`okx`, `gate`, `binance`, and `aster`.
+`okx`, `gate`, `binance`, `aster`, `hyperliquid`, `bitget`, and `htx`.
 
 ## Domain Model
 
