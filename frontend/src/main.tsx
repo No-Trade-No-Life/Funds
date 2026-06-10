@@ -16,6 +16,7 @@ type FundRecord = {
       total_profit: number;
     };
     investors: Record<string, InvestorMeta>;
+    investor_derived: Record<string, InvestorDerived>;
   };
   events: FundEvent[];
 };
@@ -30,6 +31,17 @@ type InvestorMeta = {
   referrer_rebate_rate: number;
   claimed_referrer_rebate: number;
   taxed: number;
+};
+
+type InvestorDerived = {
+  pre_tax_assets: number;
+  taxable: number;
+  tax: number;
+  after_tax_assets: number;
+  after_tax_profit: number;
+  after_tax_share: number;
+  floating_profit_rate: number;
+  share_ratio: number;
 };
 
 type FundEvent = {
@@ -397,7 +409,12 @@ function App() {
         </div>
         <div className="fundList">
           {funds.map((fund) => (
-            <article className="fundCard" key={fund.account_id}>
+            <button
+              className={fund.account_id === selectedFund?.account_id ? 'fundCard selectedFundCard' : 'fundCard'}
+              key={fund.account_id}
+              onClick={() => setSelectedFundId(fund.account_id)}
+              type="button"
+            >
               <div>
                 <h3>{fund.account_id}</h3>
                 <p>{fund.description}</p>
@@ -410,7 +427,7 @@ function App() {
                 <dt>Events</dt>
                 <dd>{fund.events.length}</dd>
               </dl>
-            </article>
+            </button>
           ))}
         </div>
       </section>
@@ -492,15 +509,22 @@ function App() {
           </div>
 
           <div className="investorTable">
-            {Object.entries(selectedFund.state.investors).map(([name, investor]) => (
-              <article className="investorRow" key={name}>
-                <strong>{name}</strong>
-                <span>Share {investor.share.toFixed(4)}</span>
-                <span>Deposit {formatMoney(investor.deposit)}</span>
-                <span>Tax rate {(investor.tax_rate * 100).toFixed(2)}%</span>
-                <span>Taxed {formatMoney(investor.taxed)}</span>
-              </article>
-            ))}
+            {Object.entries(selectedFund.state.investors).map(([name, investor]) => {
+              const derived = selectedFund.state.investor_derived[name];
+
+              return (
+                <article className="investorRow" key={name}>
+                  <strong>{name}</strong>
+                  <span>Share {investor.share.toFixed(4)}</span>
+                  <span>Deposit {formatMoney(investor.deposit)}</span>
+                  <span>Pre-tax {formatMoney(derived?.pre_tax_assets ?? investor.share * selectedFund.state.summary.unit_price)}</span>
+                  <span>Taxable {formatMoney(derived?.taxable ?? 0)}</span>
+                  <span>Tax due {formatMoney(derived?.tax ?? 0)}</span>
+                  <span>After-tax {formatMoney(derived?.after_tax_assets ?? investor.share * selectedFund.state.summary.unit_price)}</span>
+                  <span>Ratio {formatPercent(derived?.share_ratio ?? 0)}</span>
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -536,6 +560,10 @@ function formatMoney(value: number) {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatPercent(value: number) {
+  return `${(value * 100).toFixed(2)}%`;
 }
 
 function defaultPayload(exchange: ExchangeKind) {
