@@ -1,4 +1,5 @@
 use crate::{
+    auth::{AuthState, require_auth},
     capital::{CapitalSummary, summarize_credential, summarize_vault},
     credentials::{CredentialVault, CredentialView, RegisterCredentialRequest},
     domain::{CreateFundRequest, FundEvent, FundRecord},
@@ -8,6 +9,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
+    middleware,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
@@ -61,9 +63,8 @@ enum ApiError {
     Internal(String),
 }
 
-pub fn router(store: SharedStore) -> Router {
-    Router::new()
-        .route("/health", get(health))
+pub fn router(store: SharedStore, auth: AuthState) -> Router {
+    let protected = Router::new()
         .route("/funds", post(create_fund).get(list_funds))
         .route("/funds/{account_id}", get(get_fund))
         .route("/funds/{account_id}/events", post(append_event))
@@ -77,7 +78,10 @@ pub fn router(store: SharedStore) -> Router {
             get(get_credential_capital_summary),
         )
         .route("/capital-summary", get(get_capital_summary))
-        .with_state(store)
+        .route_layer(middleware::from_fn_with_state(auth, require_auth))
+        .with_state(store);
+
+    Router::new().route("/health", get(health)).merge(protected)
 }
 
 #[utoipa::path(get, path = "/health", responses((status = 200, body = String)))]
@@ -457,7 +461,10 @@ mod tests {
     }
 
     fn test_app() -> Router {
-        router(Arc::new(RwLock::new(Store::default())))
+        router(
+            Arc::new(RwLock::new(Store::default())),
+            AuthState::disabled(),
+        )
     }
 
     fn json_request(method: &str, uri: &str, body: Value) -> Request<Body> {

@@ -153,6 +153,16 @@ dt {
   gap: 1.2rem;
 }
 
+.authPanel {
+  margin-top: 1.2rem;
+}
+
+.authGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
 .detailPanel {
   display: grid;
   gap: 1.2rem;
@@ -350,6 +360,7 @@ dd {
   .fundCard,
   .panelHeader,
   .splitPanel,
+  .authGrid,
   .detailGrid,
   .investorRow,
   .eventRow {

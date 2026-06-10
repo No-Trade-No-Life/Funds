@@ -80,6 +80,17 @@ type CapitalSummary = {
   }[];
 };
 
+type AuthSession = {
+  session_id: string;
+  access_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
+  refresh_token: string;
+};
+
+const AUTH_ORIGIN = (import.meta.env.VITE_AUTH_ORIGIN ?? 'http://127.0.0.1:7777').replace(/\/$/, '');
+const SESSION_STORAGE_KEY = 'funds.authSession';
+
 function App() {
   const [funds, setFunds] = useState<FundRecord[]>([]);
   const [credentials, setCredentials] = useState<CredentialView[]>([]);
@@ -102,17 +113,76 @@ function App() {
   const [payload, setPayload] = useState(defaultPayload('okx'));
   const [message, setMessage] = useState('正在加载基金...');
   const [credentialMessage, setCredentialMessage] = useState('尚未操作凭证。');
+  const [email, setEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [authMessage, setAuthMessage] = useState('请使用 auth-mini 登录后继续。');
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => readStoredSession());
 
   useEffect(() => {
-    void refreshDashboard();
-  }, []);
+    if (authSession) {
+      void refreshDashboard();
+    } else {
+      setMessage('请先登录。');
+    }
+  }, [authSession?.access_token]);
+
+  function apiFetch(path: string, init: RequestInit = {}) {
+    const headers = new Headers(init.headers);
+
+    if (authSession) {
+      headers.set('Authorization', `Bearer ${authSession.access_token}`);
+    }
+
+    return fetch(path, { ...init, headers });
+  }
+
+  async function requestOtp() {
+    setAuthMessage('正在发送验证码...');
+
+    const response = await fetch(`${AUTH_ORIGIN}/email/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    setAuthMessage(response.ok ? '验证码已发送，请检查邮箱。' : '验证码发送失败。');
+  }
+
+  async function verifyOtp() {
+    setAuthMessage('正在登录...');
+
+    const response = await fetch(`${AUTH_ORIGIN}/email/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code: otpCode }),
+    });
+
+    if (!response.ok) {
+      setAuthMessage('登录失败，请检查邮箱和验证码。');
+      return;
+    }
+
+    const session = (await response.json()) as AuthSession;
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    setAuthSession(session);
+    setAuthMessage('登录成功。');
+  }
+
+  function logout() {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    setAuthSession(null);
+    setFunds([]);
+    setCredentials([]);
+    setCapitalSummary(null);
+    setAuthMessage('已退出登录。');
+  }
 
   async function refreshDashboard() {
     await Promise.all([loadFunds(), loadCredentials(), loadCapitalSummary()]);
   }
 
   async function loadFunds() {
-    const response = await fetch('/funds');
+    const response = await apiFetch('/funds');
     const records = (await response.json()) as FundRecord[];
     setFunds(records);
     setSelectedFundId((current) => current || records[0]?.account_id || '');
@@ -120,12 +190,12 @@ function App() {
   }
 
   async function loadCredentials() {
-    const response = await fetch('/credentials');
+    const response = await apiFetch('/credentials');
     setCredentials((await response.json()) as CredentialView[]);
   }
 
   async function loadCapitalSummary() {
-    const response = await fetch('/capital-summary');
+    const response = await apiFetch('/capital-summary');
     setCapitalSummary((await response.json()) as CapitalSummary);
   }
 
@@ -141,7 +211,7 @@ function App() {
 
     setCredentialMessage('正在注册凭证...');
 
-    const response = await fetch('/credentials', {
+    const response = await apiFetch('/credentials', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -158,7 +228,7 @@ function App() {
   async function deleteCredential(id: string) {
     setCredentialMessage('正在删除凭证...');
 
-    const response = await fetch(`/credentials/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/credentials/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
 
@@ -167,7 +237,7 @@ function App() {
   }
 
   async function createFund() {
-    const response = await fetch('/funds', {
+    const response = await apiFetch('/funds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -188,7 +258,7 @@ function App() {
       return;
     }
 
-    const response = await fetch(`/funds/${encodeURIComponent(eventFundId)}/events`, {
+    const response = await apiFetch(`/funds/${encodeURIComponent(eventFundId)}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -209,7 +279,7 @@ function App() {
   }
 
   async function appendFundEvent(accountId: string, event: FundEvent) {
-    const response = await fetch(`/funds/${encodeURIComponent(accountId)}/events`, {
+    const response = await apiFetch(`/funds/${encodeURIComponent(accountId)}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(event),
@@ -294,6 +364,32 @@ function App() {
           <button type="button" onClick={() => void refreshDashboard()}>
             刷新
           </button>
+        </div>
+      </section>
+
+      <section className="panel authPanel">
+        <div className="panelHeader compact">
+          <h2>登录</h2>
+          <span>{authSession ? '已通过 auth-mini 登录' : authMessage}</span>
+        </div>
+        <div className="authGrid">
+          <label>
+            Auth Mini 地址
+            <input value={AUTH_ORIGIN} readOnly />
+          </label>
+          <label>
+            邮箱
+            <input value={email} onChange={(event) => setEmail(event.target.value)} inputMode="email" />
+          </label>
+          <label>
+            验证码
+            <input value={otpCode} onChange={(event) => setOtpCode(event.target.value)} inputMode="numeric" />
+          </label>
+        </div>
+        <div className="actions">
+          <button type="button" onClick={() => void requestOtp()}>发送验证码</button>
+          <button type="button" onClick={() => void verifyOtp()}>登录</button>
+          <button type="button" onClick={logout}>退出</button>
         </div>
       </section>
 
@@ -629,6 +725,16 @@ function formatMoney(value: number) {
 
 function summaryStatusLabel(value: CapitalSummary['accounts'][number]['status']) {
   return value === 'ok' ? '正常' : '失败';
+}
+
+function readStoredSession() {
+  const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  return JSON.parse(raw) as AuthSession;
 }
 
 function formatPercent(value: number) {

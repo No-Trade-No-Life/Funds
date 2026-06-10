@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod api;
+mod auth;
 mod capital;
 mod credentials;
 mod domain;
@@ -8,7 +9,7 @@ mod exchanges;
 mod proxy;
 mod storage;
 
-use crate::{api::Store, capital::*, credentials::*, domain::*};
+use crate::{api::Store, auth::AuthState, capital::*, credentials::*, domain::*};
 use axum::Router;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
@@ -73,7 +74,7 @@ fn app() -> Router {
         Store::open(database_path()).expect("open sqlite database"),
     ));
 
-    api::router(store)
+    api::router(store, AuthState::from_env())
         .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .fallback(proxy::frontend_proxy)
 }

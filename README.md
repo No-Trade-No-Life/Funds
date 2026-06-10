@@ -20,6 +20,29 @@ The service listens on `127.0.0.1:3000`. Override it with `HTTP_ADDR`.
 The backend persists funds and credentials in SQLite. By default it uses
 `funds.sqlite` in the project directory. Override it with `DATABASE_PATH`.
 
+## Authentication
+
+The app can use [`auth-mini`](https://github.com/zccz14/auth-mini) as the IdP.
+Start auth-mini separately, then run this backend with `AUTH_ISSUER` set to the
+auth-mini issuer origin:
+
+```sh
+AUTH_ISSUER=http://127.0.0.1:7777 cargo run
+```
+
+When `AUTH_ISSUER` is set, fund, credential, and capital summary APIs require
+`Authorization: Bearer <auth-mini access_token>`. `GET /health` stays public.
+
+For local frontend login, set the auth-mini browser origin when needed:
+
+```sh
+cd frontend
+VITE_AUTH_ORIGIN=http://127.0.0.1:7777 npm run dev
+```
+
+auth-mini authenticates users only. Manager/investor authorization remains this
+app's responsibility.
+
 ## Frontend
 
 ```sh
