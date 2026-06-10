@@ -109,6 +109,13 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_credential(&self, id: &str) -> Result<(), StorageError> {
+        let connection = self.lock()?;
+        connection.execute("DELETE FROM credentials WHERE id = ?1", params![id])?;
+
+        Ok(())
+    }
+
     fn migrate(&self) -> Result<(), StorageError> {
         let connection = self.lock()?;
         connection.execute_batch(
@@ -229,5 +236,21 @@ mod tests {
             loaded.get("credential-1").unwrap().payload["secret_key"],
             "secret"
         );
+    }
+
+    #[test]
+    fn deletes_credentials() {
+        let database = Database::memory().unwrap();
+        let mut vault = CredentialVault::default();
+        let credential = vault.register(RegisterCredentialRequest {
+            label: "OKX main".to_owned(),
+            exchange: ExchangeKind::Okx,
+            payload: json!({ "secret_key": "secret" }),
+        });
+
+        database.save_credential(&credential).unwrap();
+        database.delete_credential("credential-1").unwrap();
+
+        assert!(database.load_credentials().unwrap().list().is_empty());
     }
 }

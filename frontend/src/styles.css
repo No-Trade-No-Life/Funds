@@ -228,11 +228,22 @@ dt {
 }
 
 .credentialCard {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.35rem;
   border-radius: 1.1rem;
   padding: 1rem;
   background: rgba(17, 16, 14, 0.62);
+}
+
+.credentialCard div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.credentialCard button {
+  padding: 0.65rem 0.9rem;
 }
 
 .credentialCard span {
@@ -347,5 +358,10 @@ dd {
 
   .panelHeader {
     display: grid;
+  }
+
+  .credentialCard {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

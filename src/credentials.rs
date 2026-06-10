@@ -40,6 +40,10 @@ impl CredentialVault {
         self.records.get(id)
     }
 
+    pub fn remove(&mut self, id: &str) -> Option<CredentialRecord> {
+        self.records.remove(id)
+    }
+
     pub fn records(&self) -> impl Iterator<Item = &CredentialRecord> {
         self.records.values()
     }

@@ -152,6 +152,15 @@ function App() {
     await refreshDashboard();
   }
 
+  async function deleteCredential(id: string) {
+    const response = await fetch(`/credentials/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+
+    setMessage(response.ok ? 'Credential deleted.' : 'Credential deletion failed.');
+    await refreshDashboard();
+  }
+
   async function createFund() {
     const response = await fetch('/funds', {
       method: 'POST',
@@ -371,9 +380,12 @@ function App() {
         <div className="credentialList">
           {credentials.map((credential) => (
             <article className="credentialCard" key={credential.id}>
-              <strong>{credential.label}</strong>
-              <span>{credential.exchange}</span>
-              <small>{credential.id}</small>
+              <div>
+                <strong>{credential.label}</strong>
+                <span>{credential.exchange}</span>
+                <small>{credential.id}</small>
+              </div>
+              <button type="button" onClick={() => void deleteCredential(credential.id)}>Delete</button>
             </article>
           ))}
         </div>

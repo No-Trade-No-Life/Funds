@@ -9,7 +9,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use serde::Serialize;
 use std::{collections::BTreeMap, path::Path as FilePath, sync::Arc};
@@ -71,6 +71,7 @@ pub fn router(store: SharedStore) -> Router {
             "/credentials",
             post(register_credential).get(list_credentials),
         )
+        .route("/credentials/{credential_id}", delete(delete_credential))
         .route(
             "/credentials/{credential_id}/capital-summary",
             get(get_credential_capital_summary),
@@ -186,6 +187,27 @@ async fn list_credentials(State(store): State<SharedStore>) -> Json<Vec<Credenti
     let store = store.read().await;
 
     Json(store.credentials.list())
+}
+
+#[utoipa::path(
+    delete,
+    path = "/credentials/{credential_id}",
+    params(("credential_id" = String, Path, description = "Credential id")),
+    responses((status = 204), (status = 404, body = ErrorBody))
+)]
+async fn delete_credential(
+    State(store): State<SharedStore>,
+    Path(credential_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let mut store = store.write().await;
+
+    store
+        .credentials
+        .remove(&credential_id)
+        .ok_or_else(|| ApiError::NotFound(format!("credential '{credential_id}' was not found")))?;
+    store.database.delete_credential(&credential_id)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(get, path = "/capital-summary", responses((status = 200, body = CapitalSummary)))]
@@ -373,6 +395,65 @@ mod tests {
         let body = response_body(response).await;
         assert_eq!(body["id"], "credential-1");
         assert_eq!(body.get("payload"), None);
+    }
+
+    #[tokio::test]
+    async fn delete_credential_removes_record() {
+        let app = test_app();
+
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                "/credentials",
+                json!({
+                    "label": "OKX main",
+                    "exchange": "okx",
+                    "payload": { "secret_key": "secret" }
+                }),
+            ))
+            .await
+            .unwrap();
+        let delete_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/credentials/credential-1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(delete_response.status(), StatusCode::NO_CONTENT);
+
+        let list_response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/credentials")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = response_body(list_response).await;
+        assert!(body.as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_missing_credential_returns_not_found() {
+        let response = test_app()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/credentials/missing")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     fn test_app() -> Router {

@@ -25,6 +25,7 @@ use utoipa_swagger_ui::SwaggerUi;
         api::append_event,
         api::register_credential,
         api::list_credentials,
+        api::delete_credential,
         api::get_credential_capital_summary,
         api::get_capital_summary
     ),
