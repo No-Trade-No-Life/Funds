@@ -57,7 +57,7 @@ struct ApiDoc;
 #[tokio::main]
 async fn main() {
     let app = app();
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = http_addr();
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind HTTP listener");
@@ -80,6 +80,13 @@ fn app() -> Router {
 
 fn database_path() -> String {
     std::env::var("DATABASE_PATH").unwrap_or_else(|_| "funds.sqlite".to_owned())
+}
+
+fn http_addr() -> SocketAddr {
+    std::env::var("HTTP_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
+        .parse()
+        .expect("parse HTTP_ADDR")
 }
 
 async fn shutdown_signal() {

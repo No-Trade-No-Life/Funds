@@ -15,7 +15,7 @@ Fund Management App.
 cargo run
 ```
 
-The service listens on `127.0.0.1:3000`.
+The service listens on `127.0.0.1:3000`. Override it with `HTTP_ADDR`.
 
 The backend persists funds and credentials in SQLite. By default it uses
 `funds.sqlite` in the project directory. Override it with `DATABASE_PATH`.
@@ -40,10 +40,23 @@ The Rust service reverse-proxies unmatched routes to the Vite dev server at
 - `POST /funds/{account_id}/events`
 - `POST /credentials`
 - `GET /credentials`
+- `DELETE /credentials/{credential_id}`
 - `GET /credentials/{credential_id}/capital-summary`
 - `GET /capital-summary`
 - `GET /docs`
 - `GET /api-doc/openapi.json`
+
+## HTTP API Smoke Test
+
+Run an interface-level smoke test against the real HTTP service:
+
+```sh
+scripts/http-api-smoke.sh
+```
+
+The script starts the backend with a temporary SQLite database, calls the HTTP
+API with `curl`, asserts response status codes and JSON bodies, then stops the
+server.
 
 ## Credentials And Capital Summary
 
