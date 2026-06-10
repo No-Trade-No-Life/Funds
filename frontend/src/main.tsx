@@ -101,6 +101,7 @@ function App() {
   const [exchange, setExchange] = useState<ExchangeKind>('okx');
   const [payload, setPayload] = useState(defaultPayload('okx'));
   const [message, setMessage] = useState('正在加载基金...');
+  const [credentialMessage, setCredentialMessage] = useState('尚未操作凭证。');
 
   useEffect(() => {
     void refreshDashboard();
@@ -134,9 +135,11 @@ function App() {
     try {
       parsedPayload = JSON.parse(payload);
     } catch {
-      setMessage('凭证密钥内容必须是有效 JSON。');
+      setCredentialMessage('凭证密钥内容必须是有效 JSON。');
       return;
     }
+
+    setCredentialMessage('正在注册凭证...');
 
     const response = await fetch('/credentials', {
       method: 'POST',
@@ -148,17 +151,19 @@ function App() {
       }),
     });
 
-    setMessage(response.ok ? '凭证已注册。' : '凭证注册失败。');
-    await refreshDashboard();
+    await loadCredentials();
+    setCredentialMessage(response.ok ? '凭证已注册。' : '凭证注册失败。');
   }
 
   async function deleteCredential(id: string) {
+    setCredentialMessage('正在删除凭证...');
+
     const response = await fetch(`/credentials/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
 
-    setMessage(response.ok ? '凭证已删除。' : '凭证删除失败。');
-    await refreshDashboard();
+    await loadCredentials();
+    setCredentialMessage(response.ok ? '凭证已删除。' : '凭证删除失败。');
   }
 
   async function createFund() {
@@ -344,7 +349,7 @@ function App() {
         <div>
           <div className="panelHeader compact">
             <h2>交易所凭证</h2>
-            <span>已注册 {credentials.length} 个</span>
+            <span>{credentialMessage} 已注册 {credentials.length} 个。</span>
           </div>
           <label>
             名称
