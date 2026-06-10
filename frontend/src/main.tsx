@@ -526,10 +526,54 @@ function App() {
               );
             })}
           </div>
+
+          <EventTimeline events={selectedFund.events} />
         </section>
       ) : null}
     </main>
   );
+}
+
+function EventTimeline({ events }: { events: FundEvent[] }) {
+  return (
+    <section className="eventTimeline" aria-label="Fund event timeline">
+      <div className="panelHeader compact">
+        <h3>Event timeline</h3>
+        <span>{events.length} total</span>
+      </div>
+      <div className="eventList">
+        {[...events].reverse().map((event, index) => (
+          <article className="eventRow" key={`${event.updated_at}-${index}`}>
+            <div>
+              <strong>{eventTitle(event)}</strong>
+              <p>{event.comment ?? 'No comment'}</p>
+            </div>
+            <span>{formatDateTime(event.updated_at)}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function eventTitle(event: FundEvent) {
+  if (event.order) {
+    return `Deposit ${formatMoney(event.order.deposit)} from ${event.order.name}`;
+  }
+
+  if (event.fund_equity) {
+    return `Equity updated to ${formatMoney(event.fund_equity.equity)}`;
+  }
+
+  if (event.investor) {
+    return `Investor settings for ${event.investor.name}`;
+  }
+
+  if (event.taxation) {
+    return `Taxation: ${event.taxation.replaceAll('_', ' ')}`;
+  }
+
+  return 'Fund event';
 }
 
 function NavChart({ points }: { points: Array<{ index: number; unitPrice: number }> }) {
@@ -564,6 +608,13 @@ function formatMoney(value: number) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
 }
 
 function defaultPayload(exchange: ExchangeKind) {

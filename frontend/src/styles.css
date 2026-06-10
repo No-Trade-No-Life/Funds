@@ -264,6 +264,37 @@ dt {
   font-size: 0.88rem;
 }
 
+.eventTimeline {
+  border-radius: 1.2rem;
+  padding: 1rem;
+  background: rgba(17, 16, 14, 0.62);
+}
+
+.eventList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.eventRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  border-top: 1px solid rgba(244, 195, 109, 0.14);
+  padding-top: 0.75rem;
+}
+
+.eventRow p {
+  margin-top: 0.35rem;
+  color: #cdbb9f;
+  font-size: 0.88rem;
+}
+
+.eventRow span {
+  color: #cdbb9f;
+  font-size: 0.82rem;
+}
+
 .fundCard {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -309,7 +340,8 @@ dd {
   .panelHeader,
   .splitPanel,
   .detailGrid,
-  .investorRow {
+  .investorRow,
+  .eventRow {
     grid-template-columns: 1fr;
   }
 
