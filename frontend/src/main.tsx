@@ -85,22 +85,22 @@ function App() {
   const [credentials, setCredentials] = useState<CredentialView[]>([]);
   const [capitalSummary, setCapitalSummary] = useState<CapitalSummary | null>(null);
   const [fundAccountId, setFundAccountId] = useState('fund/main');
-  const [fundDescription, setFundDescription] = useState('Main fund');
+  const [fundDescription, setFundDescription] = useState('主基金');
   const [eventFundId, setEventFundId] = useState('fund/main');
-  const [investorName, setInvestorName] = useState('Alice');
+  const [investorName, setInvestorName] = useState('张三');
   const [deposit, setDeposit] = useState('1000');
   const [selectedFundId, setSelectedFundId] = useState('');
   const [equityValue, setEquityValue] = useState('');
-  const [detailInvestorName, setDetailInvestorName] = useState('Alice');
+  const [detailInvestorName, setDetailInvestorName] = useState('张三');
   const [taxRate, setTaxRate] = useState('0.2');
   const [taxThresholdDelta, setTaxThresholdDelta] = useState('0');
   const [referrer, setReferrer] = useState('');
   const [rebateRate, setRebateRate] = useState('0');
   const [taxationKind, setTaxationKind] = useState<'legacy' | 'preserve_fund_assets'>('preserve_fund_assets');
-  const [credentialLabel, setCredentialLabel] = useState('Main exchange');
+  const [credentialLabel, setCredentialLabel] = useState('主交易所账户');
   const [exchange, setExchange] = useState<ExchangeKind>('okx');
   const [payload, setPayload] = useState(defaultPayload('okx'));
-  const [message, setMessage] = useState('Loading funds...');
+  const [message, setMessage] = useState('正在加载基金...');
 
   useEffect(() => {
     void refreshDashboard();
@@ -115,7 +115,7 @@ function App() {
     const records = (await response.json()) as FundRecord[];
     setFunds(records);
     setSelectedFundId((current) => current || records[0]?.account_id || '');
-    setMessage(records.length === 0 ? 'No funds yet. Create one through the API.' : 'Funds loaded.');
+    setMessage(records.length === 0 ? '暂无基金，请先创建基金。' : '基金已加载。');
   }
 
   async function loadCredentials() {
@@ -134,7 +134,7 @@ function App() {
     try {
       parsedPayload = JSON.parse(payload);
     } catch {
-      setMessage('Credential payload must be valid JSON.');
+      setMessage('凭证密钥内容必须是有效 JSON。');
       return;
     }
 
@@ -148,7 +148,7 @@ function App() {
       }),
     });
 
-    setMessage(response.ok ? 'Credential registered.' : 'Credential registration failed.');
+    setMessage(response.ok ? '凭证已注册。' : '凭证注册失败。');
     await refreshDashboard();
   }
 
@@ -157,7 +157,7 @@ function App() {
       method: 'DELETE',
     });
 
-    setMessage(response.ok ? 'Credential deleted.' : 'Credential deletion failed.');
+    setMessage(response.ok ? '凭证已删除。' : '凭证删除失败。');
     await refreshDashboard();
   }
 
@@ -171,7 +171,7 @@ function App() {
       }),
     });
 
-    setMessage(response.ok ? 'Fund created.' : 'Fund creation failed.');
+    setMessage(response.ok ? '基金已创建。' : '基金创建失败。');
     await loadFunds();
   }
 
@@ -179,7 +179,7 @@ function App() {
     const depositValue = Number(deposit);
 
     if (!Number.isFinite(depositValue)) {
-      setMessage('Deposit must be a number.');
+      setMessage('入金金额必须是数字。');
       return;
     }
 
@@ -188,7 +188,7 @@ function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         updated_at: new Date().toISOString(),
-        comment: `Deposit from ${investorName}`,
+        comment: `${investorName} 入金`,
         fund_equity: null,
         order: {
           name: investorName,
@@ -199,7 +199,7 @@ function App() {
       }),
     });
 
-    setMessage(response.ok ? 'Deposit event appended.' : 'Deposit event failed.');
+    setMessage(response.ok ? '入金事件已追加。' : '入金事件追加失败。');
     await loadFunds();
   }
 
@@ -210,7 +210,7 @@ function App() {
       body: JSON.stringify(event),
     });
 
-    setMessage(response.ok ? 'Fund event appended.' : 'Fund event failed.');
+    setMessage(response.ok ? '基金事件已追加。' : '基金事件追加失败。');
     await loadFunds();
   }
 
@@ -218,13 +218,13 @@ function App() {
     const equity = Number(equityValue);
 
     if (!selectedFund || !Number.isFinite(equity)) {
-      setMessage('Select a fund and enter a valid equity value.');
+      setMessage('请选择基金并输入有效总权益。');
       return;
     }
 
     await appendFundEvent(selectedFund.account_id, {
       updated_at: new Date().toISOString(),
-      comment: 'Fund equity update',
+      comment: '更新基金总权益',
       fund_equity: { equity },
       order: null,
       investor: null,
@@ -238,13 +238,13 @@ function App() {
     const parsedRebateRate = Number(rebateRate);
 
     if (!selectedFund || !Number.isFinite(parsedTaxRate) || !Number.isFinite(parsedThresholdDelta) || !Number.isFinite(parsedRebateRate)) {
-      setMessage('Investor update values must be valid numbers.');
+      setMessage('投资人设置中的数值必须是有效数字。');
       return;
     }
 
     await appendFundEvent(selectedFund.account_id, {
       updated_at: new Date().toISOString(),
-      comment: `Investor update for ${detailInvestorName}`,
+      comment: `更新 ${detailInvestorName} 的投资人设置`,
       fund_equity: null,
       order: null,
       investor: {
@@ -260,13 +260,13 @@ function App() {
 
   async function applyTaxation() {
     if (!selectedFund) {
-      setMessage('Select a fund before applying taxation.');
+      setMessage('请先选择基金再执行结税。');
       return;
     }
 
     await appendFundEvent(selectedFund.account_id, {
       updated_at: new Date().toISOString(),
-      comment: 'Taxation event',
+      comment: '执行结税',
       fund_equity: null,
       order: null,
       investor: null,
@@ -281,61 +281,61 @@ function App() {
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">Fund Operations</p>
-        <h1>Funds dashboard</h1>
-        <p className="intro">A Vite, TypeScript, and React frontend served through the Rust gateway.</p>
+        <p className="eyebrow">基金运营</p>
+        <h1>基金管理台</h1>
+        <p className="intro">统一管理基金、投资人、交易所凭证和资金汇总。</p>
         <div className="actions">
-          <a href="/docs">Open API Docs</a>
+          <a href="/docs">打开 API 文档</a>
           <button type="button" onClick={() => void refreshDashboard()}>
-            Refresh
+            刷新
           </button>
         </div>
       </section>
 
-      <section className="metrics" aria-label="Fund summary metrics">
-        <Metric label="Funds" value={funds.length.toString()} />
-        <Metric label="Investors" value={totalInvestors.toString()} />
-        <Metric label="Assets" value={formatMoney(totalAssets)} />
-        <Metric label="Exchange Equity" value={formatMoney(capitalSummary?.total_equity_usd ?? 0)} />
+      <section className="metrics" aria-label="基金汇总指标">
+        <Metric label="基金数" value={funds.length.toString()} />
+        <Metric label="投资人数" value={totalInvestors.toString()} />
+        <Metric label="基金资产" value={formatMoney(totalAssets)} />
+        <Metric label="交易所权益" value={formatMoney(capitalSummary?.total_equity_usd ?? 0)} />
       </section>
 
       <section className="panel splitPanel">
         <div>
           <div className="panelHeader compact">
-            <h2>Create fund</h2>
-            <span>Persisted in SQLite</span>
+            <h2>创建基金</h2>
+            <span>数据持久化到 SQLite</span>
           </div>
           <label>
-            Account ID
+            基金账户 ID
             <input value={fundAccountId} onChange={(event) => setFundAccountId(event.target.value)} />
           </label>
           <label>
-            Description
+            描述
             <input value={fundDescription} onChange={(event) => setFundDescription(event.target.value)} />
           </label>
           <button type="button" onClick={() => void createFund()}>
-            Create fund
+            创建基金
           </button>
         </div>
         <div>
           <div className="panelHeader compact">
-            <h2>Add deposit</h2>
-            <span>Append event</span>
+            <h2>添加入金</h2>
+            <span>追加基金事件</span>
           </div>
           <label>
-            Fund account ID
+            基金账户 ID
             <input value={eventFundId} onChange={(event) => setEventFundId(event.target.value)} />
           </label>
           <label>
-            Investor
+            投资人
             <input value={investorName} onChange={(event) => setInvestorName(event.target.value)} />
           </label>
           <label>
-            Deposit
+            入金金额
             <input value={deposit} onChange={(event) => setDeposit(event.target.value)} inputMode="decimal" />
           </label>
           <button type="button" onClick={() => void appendDeposit()}>
-            Append deposit
+            追加入金
           </button>
         </div>
       </section>
@@ -343,15 +343,15 @@ function App() {
       <section className="panel splitPanel">
         <div>
           <div className="panelHeader compact">
-            <h2>Credentials</h2>
-            <span>{credentials.length} registered</span>
+            <h2>交易所凭证</h2>
+            <span>已注册 {credentials.length} 个</span>
           </div>
           <label>
-            Label
+            名称
             <input value={credentialLabel} onChange={(event) => setCredentialLabel(event.target.value)} />
           </label>
           <label>
-            Exchange
+            交易所
             <select
               value={exchange}
               onChange={(event) => {
@@ -370,11 +370,11 @@ function App() {
             </select>
           </label>
           <label>
-            Secret payload JSON
+            密钥 JSON
             <textarea value={payload} onChange={(event) => setPayload(event.target.value)} rows={6} />
           </label>
           <button type="button" onClick={() => void registerCredential()}>
-            Register credential
+            注册凭证
           </button>
         </div>
         <div className="credentialList">
@@ -385,7 +385,7 @@ function App() {
                 <span>{credential.exchange}</span>
                 <small>{credential.id}</small>
               </div>
-              <button type="button" onClick={() => void deleteCredential(credential.id)}>Delete</button>
+              <button type="button" onClick={() => void deleteCredential(credential.id)}>删除</button>
             </article>
           ))}
         </div>
@@ -393,21 +393,21 @@ function App() {
 
       <section className="panel">
         <div className="panelHeader">
-          <h2>Capital summary</h2>
-          <span>{capitalSummary ? formatMoney(capitalSummary.total_equity_usd) : 'Not loaded'}</span>
+          <h2>资金汇总</h2>
+          <span>{capitalSummary ? formatMoney(capitalSummary.total_equity_usd) : '未加载'}</span>
         </div>
         <div className="fundList">
           {capitalSummary?.accounts.map((account) => (
             <article className="fundCard" key={account.credential_id}>
               <div>
                 <h3>{account.label}</h3>
-                <p>{account.exchange} / {account.status}</p>
+                <p>{account.exchange} / {summaryStatusLabel(account.status)}</p>
               </div>
               <dl>
-                <dt>Equity</dt>
+                <dt>权益</dt>
                 <dd>{formatMoney(account.equity_usd)}</dd>
-                <dt>Error</dt>
-                <dd>{account.error ?? 'None'}</dd>
+                <dt>错误</dt>
+                <dd>{account.error ?? '无'}</dd>
               </dl>
             </article>
           ))}
@@ -416,7 +416,7 @@ function App() {
 
       <section className="panel">
         <div className="panelHeader">
-          <h2>Managed funds</h2>
+          <h2>已管理基金</h2>
           <span>{message}</span>
         </div>
         <div className="fundList">
@@ -432,11 +432,11 @@ function App() {
                 <p>{fund.description}</p>
               </div>
               <dl>
-                <dt>Unit price</dt>
+                <dt>单位净值</dt>
                 <dd>{fund.state.summary.unit_price.toFixed(4)}</dd>
-                <dt>Total share</dt>
+                <dt>总份额</dt>
                 <dd>{fund.state.summary.total_share.toFixed(2)}</dd>
-                <dt>Events</dt>
+                <dt>事件数</dt>
                 <dd>{fund.events.length}</dd>
               </dl>
             </button>
@@ -447,7 +447,7 @@ function App() {
       {selectedFund ? (
         <section className="panel detailPanel">
           <div className="panelHeader">
-            <h2>Fund detail</h2>
+            <h2>基金详情</h2>
             <select value={selectedFund.account_id} onChange={(event) => setSelectedFundId(event.target.value)}>
               {funds.map((fund) => (
                 <option value={fund.account_id} key={fund.account_id}>{fund.account_id}</option>
@@ -455,67 +455,67 @@ function App() {
             </select>
           </div>
 
-          <section className="metrics compactMetrics" aria-label="Selected fund metrics">
-            <Metric label="Unit price" value={selectedFund.state.summary.unit_price.toFixed(4)} />
-            <Metric label="Total assets" value={formatMoney(selectedFund.state.total_assets)} />
-            <Metric label="Total profit" value={formatMoney(selectedFund.state.summary.total_profit)} />
-            <Metric label="Total tax" value={formatMoney(selectedFund.state.summary.total_tax)} />
+          <section className="metrics compactMetrics" aria-label="已选择基金指标">
+            <Metric label="单位净值" value={selectedFund.state.summary.unit_price.toFixed(4)} />
+            <Metric label="总资产" value={formatMoney(selectedFund.state.total_assets)} />
+            <Metric label="总收益" value={formatMoney(selectedFund.state.summary.total_profit)} />
+            <Metric label="总税费" value={formatMoney(selectedFund.state.summary.total_tax)} />
           </section>
 
           <div className="detailGrid">
             <div className="chartCard">
               <div className="panelHeader compact">
-                <h3>Net value curve</h3>
-                <span>{selectedFund.events.length} events</span>
+                <h3>净值曲线</h3>
+                <span>{selectedFund.events.length} 个事件</span>
               </div>
               <NavChart points={navPoints(selectedFund)} />
             </div>
 
             <div className="operationStack">
               <div className="operationCard">
-                <h3>Update equity</h3>
+                <h3>更新权益</h3>
                 <label>
-                  Total equity
+                  总权益
                   <input value={equityValue} onChange={(event) => setEquityValue(event.target.value)} inputMode="decimal" />
                 </label>
-                <button type="button" onClick={() => void updateFundEquity()}>Update NAV</button>
+                <button type="button" onClick={() => void updateFundEquity()}>更新净值</button>
               </div>
 
               <div className="operationCard">
-                <h3>Investor settings</h3>
+                <h3>投资人设置</h3>
                 <label>
-                  Investor
+                  投资人
                   <input value={detailInvestorName} onChange={(event) => setDetailInvestorName(event.target.value)} />
                 </label>
                 <label>
-                  Tax rate
+                  税率
                   <input value={taxRate} onChange={(event) => setTaxRate(event.target.value)} inputMode="decimal" />
                 </label>
                 <label>
-                  Tax threshold delta
+                  起征点增量
                   <input value={taxThresholdDelta} onChange={(event) => setTaxThresholdDelta(event.target.value)} inputMode="decimal" />
                 </label>
                 <label>
-                  Referrer
+                  推荐人
                   <input value={referrer} onChange={(event) => setReferrer(event.target.value)} />
                 </label>
                 <label>
-                  Rebate rate
+                  返佣比例
                   <input value={rebateRate} onChange={(event) => setRebateRate(event.target.value)} inputMode="decimal" />
                 </label>
-                <button type="button" onClick={() => void updateInvestor()}>Update investor</button>
+                <button type="button" onClick={() => void updateInvestor()}>更新投资人</button>
               </div>
 
               <div className="operationCard">
-                <h3>Taxation</h3>
+                <h3>结税</h3>
                 <label>
-                  Mode
+                  模式
                   <select value={taxationKind} onChange={(event) => setTaxationKind(event.target.value as typeof taxationKind)}>
-                    <option value="preserve_fund_assets">Preserve fund assets</option>
-                    <option value="legacy">Legacy</option>
+                    <option value="preserve_fund_assets">保留基金资产</option>
+                    <option value="legacy">传统模式</option>
                   </select>
                 </label>
-                <button type="button" onClick={() => void applyTaxation()}>Apply taxation</button>
+                <button type="button" onClick={() => void applyTaxation()}>执行结税</button>
               </div>
             </div>
           </div>
@@ -527,13 +527,13 @@ function App() {
               return (
                 <article className="investorRow" key={name}>
                   <strong>{name}</strong>
-                  <span>Share {investor.share.toFixed(4)}</span>
-                  <span>Deposit {formatMoney(investor.deposit)}</span>
-                  <span>Pre-tax {formatMoney(derived?.pre_tax_assets ?? investor.share * selectedFund.state.summary.unit_price)}</span>
-                  <span>Taxable {formatMoney(derived?.taxable ?? 0)}</span>
-                  <span>Tax due {formatMoney(derived?.tax ?? 0)}</span>
-                  <span>After-tax {formatMoney(derived?.after_tax_assets ?? investor.share * selectedFund.state.summary.unit_price)}</span>
-                  <span>Ratio {formatPercent(derived?.share_ratio ?? 0)}</span>
+                  <span>份额 {investor.share.toFixed(4)}</span>
+                  <span>入金 {formatMoney(investor.deposit)}</span>
+                  <span>税前资产 {formatMoney(derived?.pre_tax_assets ?? investor.share * selectedFund.state.summary.unit_price)}</span>
+                  <span>应税额 {formatMoney(derived?.taxable ?? 0)}</span>
+                  <span>应缴税 {formatMoney(derived?.tax ?? 0)}</span>
+                  <span>税后资产 {formatMoney(derived?.after_tax_assets ?? investor.share * selectedFund.state.summary.unit_price)}</span>
+                  <span>占比 {formatPercent(derived?.share_ratio ?? 0)}</span>
                 </article>
               );
             })}
@@ -548,17 +548,17 @@ function App() {
 
 function EventTimeline({ events }: { events: FundEvent[] }) {
   return (
-    <section className="eventTimeline" aria-label="Fund event timeline">
+    <section className="eventTimeline" aria-label="基金事件流水">
       <div className="panelHeader compact">
-        <h3>Event timeline</h3>
-        <span>{events.length} total</span>
+        <h3>事件流水</h3>
+        <span>共 {events.length} 条</span>
       </div>
       <div className="eventList">
         {[...events].reverse().map((event, index) => (
           <article className="eventRow" key={`${event.updated_at}-${index}`}>
             <div>
               <strong>{eventTitle(event)}</strong>
-              <p>{event.comment ?? 'No comment'}</p>
+              <p>{event.comment ?? '无备注'}</p>
             </div>
             <span>{formatDateTime(event.updated_at)}</span>
           </article>
@@ -570,29 +570,33 @@ function EventTimeline({ events }: { events: FundEvent[] }) {
 
 function eventTitle(event: FundEvent) {
   if (event.order) {
-    return `Deposit ${formatMoney(event.order.deposit)} from ${event.order.name}`;
+    return `${event.order.name} 入金 ${formatMoney(event.order.deposit)}`;
   }
 
   if (event.fund_equity) {
-    return `Equity updated to ${formatMoney(event.fund_equity.equity)}`;
+    return `总权益更新为 ${formatMoney(event.fund_equity.equity)}`;
   }
 
   if (event.investor) {
-    return `Investor settings for ${event.investor.name}`;
+    return `更新 ${event.investor.name} 的投资人设置`;
   }
 
   if (event.taxation) {
-    return `Taxation: ${event.taxation.replaceAll('_', ' ')}`;
+    return `结税：${taxationLabel(event.taxation)}`;
   }
 
-  return 'Fund event';
+  return '基金事件';
+}
+
+function taxationLabel(value: NonNullable<FundEvent['taxation']>) {
+  return value === 'preserve_fund_assets' ? '保留基金资产' : '传统模式';
 }
 
 function NavChart({ points }: { points: Array<{ index: number; unitPrice: number }> }) {
   const path = chartPath(points);
 
   return (
-    <svg className="navChart" viewBox="0 0 640 220" role="img" aria-label="Net value curve">
+    <svg className="navChart" viewBox="0 0 640 220" role="img" aria-label="净值曲线">
       <path className="chartGrid" d="M20 40 H620 M20 110 H620 M20 180 H620" />
       <path className="chartLine" d={path} />
       <text x="24" y="32">{points.at(-1)?.unitPrice.toFixed(4) ?? '1.0000'}</text>
@@ -611,11 +615,15 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function formatMoney(value: number) {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function summaryStatusLabel(value: CapitalSummary['accounts'][number]['status']) {
+  return value === 'ok' ? '正常' : '失败';
 }
 
 function formatPercent(value: number) {
@@ -623,7 +631,7 @@ function formatPercent(value: number) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value));
